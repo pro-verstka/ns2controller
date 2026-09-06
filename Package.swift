@@ -14,6 +14,9 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("IOKit"),
                 .linkedFramework("IOUSBHost"),
+                .linkedFramework("Carbon"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("ApplicationServices"),
             ]
         ),
         .executableTarget(

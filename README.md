@@ -42,6 +42,7 @@
 | `ns2ctl send HEX...` | Отправить произвольную bulk-команду и показать ответ |
 | `ns2ctl flash 0xADDR` | Прочитать блок flash (калибровка и т.п.) |
 | `ns2ctl steam-mapping` | Строки `SDL_GAMECONTROLLERCONFIG` для Steam |
+| `ns2ctl kbm [--profile NAME] [--exclusive] [--dry-run]` | Клавиатурно-мышиный мост (см. ниже) |
 
 ## Раскладка HID
 
@@ -86,6 +87,38 @@ winebus в CrossOver работает через SDL-бэкенд (`Enable SDL=1
 После этого бутылку нужно перезапустить (закрыть все её Windows-программы), тогда winebus создаст XInput-геймпад с D-pad как hat и триггерами как осями.
 
 **Не используйте ключ реестра `HKLM\System\CurrentControlSet\Services\winebus\map`.** В текущем Wine функция `sdl_bus_load_mappings` содержит ошибку (запись в `mappings[count]` после `count++`), и любое значение в этом ключе роняет `winedevice.exe` с winebus — в бутылке пропадают все геймпады. Скрипт удаляет этот ключ, если он есть.
+
+## Клавиатурно-мышиный мост
+
+Для игр, которые не видят generic HID-геймпад (всё на GameController framework: Lies of P, порты Unreal/Unity, Apple Arcade) или вообще без поддержки геймпада, `ns2ctl kbm` превращает контроллер в клавиатуру и мышь через CGEvent. Идея и гистерезис взяты из `mlstr0m/switch2bridge-macos`, но вход читается по USB на 250 Гц, а стики нормализуются по заводской калибровке из flash, поэтому мышь по стику получается с честным аналогом.
+
+```bash
+ns2ctl kbm --init-profile mygame      # шаблон в ~/Library/Application Support/ns2controller/profiles/mygame.json
+ns2ctl kbm --profile mygame -v        # запуск; без --profile берётся default
+ns2ctl kbm --list-profiles
+```
+
+Профиль:
+
+```json
+{
+  "deadzone": 0.15,
+  "left_stick":  { "mode": "keys",  "threshold": 0.5, "up": "w", "down": "s", "left": "a", "right": "d" },
+  "right_stick": { "mode": "mouse", "sensitivity": 1200, "curve": 1.5, "invert_y": false },
+  "buttons": { "a": "space", "b": "left_ctrl", "l": "mouse_right", "r": "mouse_left", "home": null, "...": "..." },
+  "pause_combo": ["home"],
+  "pause_hold_seconds": 1.0
+}
+```
+
+- Режимы стика: `keys` (четыре направления с гистерезисом: нажатие выше `threshold`, отпускание ниже `0.8·threshold`), `mouse` (`sensitivity` — пиксели в секунду при полном отклонении, `curve` — показатель кривой отклика), `none`.
+- Имена клавиш: буквы и цифры, `f1`…`f20`, `up/down/left/right`, `space`, `return`, `escape`, `tab`, `backspace`, `delete`, `left_shift`, `left_ctrl`, `left_alt`, `left_cmd` и правые варианты, `home/end/page_up/page_down`, знаки (`minus`, `comma`, `period`, `slash` …), `mouse_left/right/middle/4/5`, `scroll_up/down`. Кнопки: `a b x y l r zl zr minus plus ls rs home capture c dpad_up dpad_down dpad_left dpad_right gl gr`; `null` — не назначена. Неизвестное имя — ошибка при загрузке с указанием ключа.
+- Удержание кнопок из `pause_combo` ставит мост на паузу и снимает её; кнопки комбинации на клавиши не транслируются.
+- `--exclusive` захватывает HID-устройство целиком, чтобы игра, частично видящая геймпад, не получала двойной ввод; `--dry-run` только логирует.
+- Нужно разрешение Accessibility для программы, из которой запущен `ns2ctl` (обычно Terminal): при первом запуске появится системный запрос, после включения перезапусти команду. Из LaunchAgent мост не запускается — TCC не показывает запрос демонам.
+- Левый стик в режиме клавиш восьминаправленный, аналоговой скорости движения нет. Для Steam-игр удобнее встроенная эмуляция Steam Input (шаблон «Keyboard (WASD) and Mouse»).
+
+Задел на беспроводной ввод: по BLE контроллер без всякой инициализации стримит характеристику `7492866c-ec3e-4619-8258-32755ffcc0f9` с 11-байтным отчётом того же формата, что USB report 9 без байта ID (2 байта счётчика, 3 байта кнопок в том же порядке, 6 байт стиков). Это позволит подключить мост по Bluetooth через CoreBluetooth, но для Steam и CrossOver BLE бесполезен без виртуального устройства.
 
 ## Протокол (bulk, interface 1)
 

@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import CoreGraphics
 import NS2Core
 
 let usage = """
@@ -14,6 +16,11 @@ Usage:
   ns2ctl monitor [--values] [--no-reports] [-v]
   ns2ctl led N [-v]
   ns2ctl flash 0xADDRESS [-v]
+  ns2ctl kbm [--profile NAME] [--exclusive] [--dry-run] [-v]
+                                       keyboard/mouse bridge (needs Accessibility permission)
+  ns2ctl kbm --init-profile NAME [--force]   write a profile template
+  ns2ctl kbm --list-profiles
+  ns2ctl kbm --self-test               move the cursor and tap Shift to verify Accessibility
   ns2ctl steam-mapping                 print SDL_GAMECONTROLLERCONFIG lines for Steam
   ns2ctl send HEXBYTES... [-v]        send one raw bulk command, print reply
   ns2ctl sample [SECONDS]              histogram of HID input report IDs
@@ -31,7 +38,7 @@ struct Arguments {
         while index < args.count {
             let arg = args[index]
             if arg.hasPrefix("--"), index + 1 < args.count, !args[index + 1].hasPrefix("-"),
-               ["--variant", "--led", "--hold", "--format"].contains(arg) {
+               ["--variant", "--led", "--hold", "--format", "--profile", "--init-profile"].contains(arg) {
                 values[arg] = args[index + 1]
                 index += 2
                 continue
@@ -169,6 +176,90 @@ func sampleCommand(_ arguments: Arguments) {
     } catch { fail("\(error)") }
 }
 
+nonisolated(unsafe) var signalSources: [DispatchSourceSignal] = []
+
+func installSignalHandlers(_ handler: @escaping @Sendable () -> Void) {
+    for sig in [SIGINT, SIGTERM] {
+        signal(sig, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+        source.setEventHandler(handler: handler)
+        source.resume()
+        signalSources.append(source)
+    }
+}
+
+func kbmCommand(_ arguments: Arguments) {
+    if arguments.flags.contains("--list-profiles") {
+        let names = KBMProfile.list()
+        print(names.isEmpty ? "no profiles in \(KBMProfile.directory.path)" : names.joined(separator: "\n"))
+        return
+    }
+    if arguments.flags.contains("--self-test") {
+        guard EventInjector.isAccessibilityTrusted(prompt: true) else {
+            Log.error("not trusted for Accessibility")
+            EventInjector.openAccessibilitySettings()
+            exit(1)
+        }
+        let injector = EventInjector()
+        let before = CGEvent(source: nil)?.location ?? .zero
+        injector.moveMouse(dx: 30, dy: 0)
+        Thread.sleep(forTimeInterval: 0.2)
+        let moved = CGEvent(source: nil)?.location ?? .zero
+        injector.moveMouse(dx: -30, dy: 0)
+        injector.press(.key(CGKeyCode(56)))
+        injector.release(.key(CGKeyCode(56)))
+        let ok = abs(moved.x - before.x - 30) < 2
+        Log.info(String(format: "cursor %.0f,%.0f -> %.0f,%.0f, shift tapped: %@", before.x, before.y, moved.x, moved.y, ok ? "OK" : "cursor did not move"))
+        exit(ok ? 0 : 1)
+    }
+    if let name = arguments.values["--init-profile"] {
+        do {
+            let url = try KBMProfile.writeTemplate(name: name, overwrite: arguments.flags.contains("--force"))
+            Log.info("profile: \(url.path)")
+        } catch { fail("\(error)") }
+        return
+    }
+    let name = arguments.values["--profile"] ?? "default"
+    let profile: ResolvedProfile
+    do { profile = try KBMProfile.load(name: name).resolved() } catch { fail("\(error)") }
+    let dryRun = arguments.flags.contains("--dry-run")
+    if !dryRun, !EventInjector.isAccessibilityTrusted(prompt: true) {
+        Log.error("Accessibility permission required: System Settings → Privacy & Security → Accessibility → enable the terminal app that runs ns2ctl, then restart")
+        EventInjector.openAccessibilitySettings()
+        exit(1)
+    }
+    var calibration = (left: StickCalibration.fallback, right: StickCalibration.fallback)
+    if let transport = try? BulkTransport() {
+        calibration = StickCalibration.read(using: Controller(transport: transport))
+        transport.close()
+    } else {
+        Log.warn("USB bulk interface not available, using default stick calibration")
+    }
+    Log.debug("calibration left=\(calibration.left) right=\(calibration.right)")
+    let injector = EventInjector()
+    injector.dryRun = dryRun
+    let bridge = KBMBridge(profile: profile, calibration: calibration, injector: injector)
+    bridge.onPauseChange = { paused in
+        Log.info(paused ? "bridge paused" : "bridge resumed")
+        NSSound.beep()
+        if paused { Thread.sleep(forTimeInterval: 0.25); NSSound.beep() }
+    }
+    let source = HIDInputSource(exclusive: arguments.flags.contains("--exclusive"),
+                                onAttach: { Log.info("controller attached: \($0)") },
+                                onDetach: { _ in Log.info("controller detached, releasing keys"); bridge.releaseAll() },
+                                onState: { bridge.handle($0) })
+    do { try source.start() } catch { fail("\(error)") }
+    let combo = profile.pauseCombo.map(\.name).joined(separator: "+")
+    Log.info("kbm bridge running, profile '\(name)'\(dryRun ? " (dry run)" : ""); hold \(combo.isEmpty ? "nothing" : combo) to pause, Ctrl+C to stop")
+    installSignalHandlers {
+        bridge.releaseAll()
+        source.stop()
+        Log.info("stopped")
+        exit(0)
+    }
+    dispatchMain()
+}
+
 func daemonCommand(_ arguments: Arguments) {
     let daemon = Daemon(variant: variant(from: arguments),
                         format: reportFormat(from: arguments),
@@ -194,5 +285,6 @@ case "steam-mapping": print(SteamMapping.config)
 case "format": formatCommand(arguments)
 case "reset": resetCommand()
 case "sample": sampleCommand(arguments)
+case "kbm": kbmCommand(arguments)
 default: print(usage)
 }

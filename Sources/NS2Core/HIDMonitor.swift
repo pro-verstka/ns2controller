@@ -30,21 +30,21 @@ public final class HIDMonitor {
     private let options: Options
     private var devices: [DeviceState] = []
 
+    public static var matchingDictionaries: [[String: Any]] {
+        USBIDs.supportedProductIDs.map { productID in
+            [kIOHIDVendorIDKey: Int(USBIDs.nintendoVendorID), kIOHIDProductIDKey: Int(productID)]
+        }
+    }
+
     public init(options: Options = Options()) {
         self.options = options
         manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        let matching = USBIDs.supportedProductIDs.map { productID -> [String: Any] in
-            [kIOHIDVendorIDKey: Int(USBIDs.nintendoVendorID), kIOHIDProductIDKey: Int(productID)]
-        }
-        IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
+        IOHIDManagerSetDeviceMatchingMultiple(manager, Self.matchingDictionaries as CFArray)
     }
 
     public static func devices() -> [IOHIDDevice] {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        let matching = USBIDs.supportedProductIDs.map { productID -> [String: Any] in
-            [kIOHIDVendorIDKey: Int(USBIDs.nintendoVendorID), kIOHIDProductIDKey: Int(productID)]
-        }
-        IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
+        IOHIDManagerSetDeviceMatchingMultiple(manager, matchingDictionaries as CFArray)
         guard let set = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return [] }
         return Array(set)
     }
@@ -105,10 +105,7 @@ public final class HIDMonitor {
 
     public static func sample(duration: TimeInterval) throws -> Sample {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        let matching = USBIDs.supportedProductIDs.map { productID -> [String: Any] in
-            [kIOHIDVendorIDKey: Int(USBIDs.nintendoVendorID), kIOHIDProductIDKey: Int(productID)]
-        }
-        IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
+        IOHIDManagerSetDeviceMatchingMultiple(manager, matchingDictionaries as CFArray)
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
         let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         guard result == kIOReturnSuccess else { throw NS2Error.ioKit("IOHIDManagerOpen", result) }

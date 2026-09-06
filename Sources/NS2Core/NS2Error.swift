@@ -6,6 +6,7 @@ public enum NS2Error: Error, CustomStringConvertible {
     case deviceNotFound
     case endpointsNotFound
     case hidDeviceNotFound
+    case profile(String)
 
     public var description: String {
         switch self {
@@ -19,6 +20,8 @@ public enum NS2Error: Error, CustomStringConvertible {
             return "bulk endpoints not found on interface \(USBIDs.bulkInterfaceNumber)"
         case .hidDeviceNotFound:
             return "no HID device for the controller (not woken up yet?)"
+        case let .profile(message):
+            return message
         }
     }
 }
