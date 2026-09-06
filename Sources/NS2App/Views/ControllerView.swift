@@ -21,6 +21,10 @@ struct ControllerView: View {
                         }
                     }
                     GridRow {
+                        Text("Bluetooth").foregroundStyle(.secondary)
+                        HStack { StatusDot(ok: model.bleConnected); Text(model.bluetoothEnabled ? model.bleStatusText : "выключен, работает только мост") }
+                    }
+                    GridRow {
                         Text("Событие").foregroundStyle(.secondary)
                         Text(model.lastEvent)
                     }
@@ -36,6 +40,7 @@ struct ControllerView: View {
                 Button("Разбудить") { model.wakeNow() }.disabled(!model.usbPresent)
                 Button("Сбросить") { model.resetController() }.disabled(!model.usbPresent)
                 Toggle("Автопробуждение", isOn: $model.autoWakeEnabled).toggleStyle(.switch)
+                Toggle("Bluetooth", isOn: $model.bluetoothEnabled).toggleStyle(.switch)
                 Spacer()
                 Picker("LED игрока", selection: $model.playerLED) {
                     ForEach(1...4, id: \.self) { Text("\($0)").tag($0) }

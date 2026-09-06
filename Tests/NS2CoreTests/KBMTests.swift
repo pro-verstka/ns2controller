@@ -27,6 +27,20 @@ private let leftFlashBlock: [UInt8] = {
         #expect(state.isPressed(.a) == false)
     }
 
+    @Test func parsesCompactBLEReportLikeHID() {
+        let ble: [UInt8] = [0xeb, 0x1b, 0x01, 0x08, 0x10, 0xc6, 0xb7, 0x84, 0x1a, 0xc8, 0x84]
+        let state = InputReport.parseCompactBLE(ble)
+        #expect(state?.pressedButtons == [.b, .dpadUp, .c])
+        #expect(state?.leftRaw == StickRaw(x: 1990, y: 2123))
+        #expect(InputReport.parseCompactBLE(Array(ble.prefix(10))) == nil)
+    }
+
+    @Test func advertisementFilterMatchesNintendo() {
+        #expect(BLEInputSource.isSwitch2Advertisement(name: nil, manufacturerData: Data([0x53, 0x05, 0x01, 0x69, 0x20])))
+        #expect(BLEInputSource.isSwitch2Advertisement(name: "Pro Controller", manufacturerData: nil))
+        #expect(!BLEInputSource.isSwitch2Advertisement(name: "AirPods", manufacturerData: Data([0x4c, 0x00, 0x01])))
+    }
+
     @Test func rejectsOtherReports() {
         #expect(InputReport.parseHID(report([0x05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])) == nil)
         #expect(InputReport.parseHID([0x09, 0, 0]) == nil)

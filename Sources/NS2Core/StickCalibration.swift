@@ -1,6 +1,6 @@
 import Foundation
 
-public struct AxisCalibration: Equatable, Sendable {
+public struct AxisCalibration: Equatable, Sendable, Codable {
     public var center: Int
     public var rangeAbove: Int
     public var rangeBelow: Int
@@ -19,7 +19,7 @@ public struct AxisCalibration: Equatable, Sendable {
     }
 }
 
-public struct StickCalibration: Equatable, Sendable {
+public struct StickCalibration: Equatable, Sendable, Codable {
     public static let leftFlashAddress: UInt32 = 0x13080
     public static let rightFlashAddress: UInt32 = 0x130C0
     public static let flashDataOffset = 0x28
@@ -69,9 +69,37 @@ public struct StickCalibration: Equatable, Sendable {
         }
         let left = block(leftFlashAddress)
         let right = block(rightFlashAddress)
-        if left == nil || right == nil {
-            Log.warn("stick calibration not readable from flash, using defaults")
+        if let left, let right {
+            CalibrationStore.save(left: left, right: right)
+            return (left, right)
         }
-        return (left ?? .fallback, right ?? .fallback)
+        Log.warn("stick calibration not readable from flash, using cached or default values")
+        return CalibrationStore.load() ?? (.fallback, .fallback)
+    }
+}
+
+public enum CalibrationStore {
+    struct Payload: Codable {
+        var left: StickCalibration
+        var right: StickCalibration
+    }
+
+    public static var url: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/ns2controller/calibration.json")
+    }
+
+    public static func save(left: StickCalibration, right: StickCalibration) {
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(Payload(left: left, right: right)).write(to: url)
+        } catch {
+            Log.warn("calibration cache not written: \(error)")
+        }
+    }
+
+    public static func load() -> (left: StickCalibration, right: StickCalibration)? {
+        guard let data = try? Data(contentsOf: url), let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return nil }
+        return (payload.left, payload.right)
     }
 }

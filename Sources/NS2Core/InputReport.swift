@@ -49,6 +49,11 @@ public enum InputReport {
         return ControllerState(buttons: buttons, leftRaw: stick(bytes, at: 6), rightRaw: stick(bytes, at: 9), counter: counter)
     }
 
+    public static func parseCompactBLE(_ bytes: [UInt8]) -> ControllerState? {
+        guard bytes.count >= 11 else { return nil }
+        return parseHID([hidReportID] + bytes)
+    }
+
     static func stick(_ bytes: [UInt8], at offset: Int) -> StickRaw {
         StickRaw(x: Int(bytes[offset]) | (Int(bytes[offset + 1] & 0x0F) << 8),
                  y: Int(bytes[offset + 1] >> 4) | (Int(bytes[offset + 2]) << 4))

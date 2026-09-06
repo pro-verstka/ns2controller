@@ -16,8 +16,9 @@ Usage:
   ns2ctl monitor [--values] [--no-reports] [-v]
   ns2ctl led N [-v]
   ns2ctl flash 0xADDRESS [-v]
-  ns2ctl kbm [--profile NAME] [--exclusive] [--dry-run] [-v]
+  ns2ctl kbm [--profile NAME] [--exclusive] [--ble] [--dry-run] [-v]
                                        keyboard/mouse bridge (needs Accessibility permission)
+  ns2ctl ble [-v]                      connect over Bluetooth LE and print input (needs Bluetooth permission)
   ns2ctl kbm --init-profile NAME [--force]   write a profile template
   ns2ctl kbm --list-profiles
   ns2ctl kbm --self-test               move the cursor and tap Shift to verify Accessibility
@@ -218,6 +219,48 @@ func installSignalHandlers(_ handler: @escaping @Sendable () -> Void) {
     }
 }
 
+nonisolated(unsafe) var bleSource: BLEInputSource?
+
+func bleStatusText(_ status: BLEInputSource.Status) -> String {
+    switch status {
+    case .off: return "off"
+    case .unauthorized: return "Bluetooth access denied: System Settings → Privacy & Security → Bluetooth → enable the terminal app"
+    case .poweredOff: return "Bluetooth is off"
+    case .scanning: return "scanning… hold the sync button on the controller until the LEDs sweep"
+    case let .connecting(name): return "connecting to \(name)"
+    case let .probing(name): return "probing characteristics of \(name)"
+    case let .connected(name): return "connected: \(name)"
+    }
+}
+
+func bleCommand(_ arguments: Arguments) {
+    final class Tracker: @unchecked Sendable {
+        let lock = NSLock()
+        var previous = ControllerState.idle
+        var first = true
+    }
+    let tracker = Tracker()
+    let source = BLEInputSource(onStatus: { status in Log.info("BLE status: \(bleStatusText(status))") }, onState: { state in
+        tracker.lock.lock(); defer { tracker.lock.unlock() }
+        if tracker.first {
+            tracker.first = false
+            Log.info("first report: L=(\(state.leftRaw.x),\(state.leftRaw.y)) R=(\(state.rightRaw.x),\(state.rightRaw.y))")
+        }
+        if state.buttons != tracker.previous.buttons {
+            Log.info("buttons: \(state.pressedButtons.map(\.name).joined(separator: " ")) (0x\(String(state.buttons, radix: 16)))")
+        }
+        tracker.previous = state
+    })
+    source.onRawReport = { bytes in
+        tracker.lock.lock(); defer { tracker.lock.unlock() }
+        if Log.verbose { Log.debug("raw: \(bytes.hexString)") }
+    }
+    source.start()
+    bleSource = source
+    installSignalHandlers { source.stop(); Log.info("stopped"); exit(0) }
+    dispatchMain()
+}
+
 func kbmCommand(_ arguments: Arguments) {
     if arguments.flags.contains("--list-profiles") {
         let names = KBMProfile.list()
@@ -264,12 +307,13 @@ func kbmCommand(_ arguments: Arguments) {
         EventInjector.openAccessibilitySettings()
         exit(1)
     }
-    var calibration = (left: StickCalibration.fallback, right: StickCalibration.fallback)
-    if let transport = try? BulkTransport() {
+    let useBLE = arguments.flags.contains("--ble")
+    var calibration = CalibrationStore.load() ?? (left: StickCalibration.fallback, right: StickCalibration.fallback)
+    if !useBLE, let transport = try? BulkTransport() {
         calibration = StickCalibration.read(using: Controller(transport: transport))
         transport.close()
-    } else {
-        Log.warn("USB bulk interface not available, using default stick calibration")
+    } else if !useBLE {
+        Log.warn("USB bulk interface not available, using cached or default stick calibration")
     }
     Log.debug("calibration left=\(calibration.left) right=\(calibration.right)")
     let injector = EventInjector()
@@ -280,16 +324,28 @@ func kbmCommand(_ arguments: Arguments) {
         NSSound.beep()
         if paused { Thread.sleep(forTimeInterval: 0.25); NSSound.beep() }
     }
-    let source = HIDInputSource(exclusive: arguments.flags.contains("--exclusive"),
-                                onAttach: { Log.info("controller attached: \($0)") },
-                                onDetach: { _ in Log.info("controller detached, releasing keys"); bridge.releaseAll() },
-                                onState: { bridge.handle($0) })
-    do { try source.start() } catch { fail("\(error)") }
+    let stopInput: @Sendable () -> Void
+    if useBLE {
+        let source = BLEInputSource(onStatus: { status in
+            Log.info("BLE status: \(bleStatusText(status))")
+            if case .connected = status {} else { bridge.releaseAll() }
+        }, onState: { bridge.handle($0) })
+        source.start()
+        bleSource = source
+        stopInput = { source.stop() }
+    } else {
+        let source = HIDInputSource(exclusive: arguments.flags.contains("--exclusive"),
+                                    onAttach: { Log.info("controller attached: \($0)") },
+                                    onDetach: { _ in Log.info("controller detached, releasing keys"); bridge.releaseAll() },
+                                    onState: { bridge.handle($0) })
+        do { try source.start() } catch { fail("\(error)") }
+        stopInput = { source.stop() }
+    }
     let combo = profile.pauseCombo.map(\.name).joined(separator: "+")
-    Log.info("kbm bridge running, profile '\(name)'\(dryRun ? " (dry run)" : ""); hold \(combo.isEmpty ? "nothing" : combo) to pause, Ctrl+C to stop")
+    Log.info("kbm bridge running, profile '\(name)'\(dryRun ? " (dry run)" : "")\(useBLE ? " over Bluetooth" : ""); hold \(combo.isEmpty ? "nothing" : combo) to pause, Ctrl+C to stop")
     installSignalHandlers {
         bridge.releaseAll()
-        source.stop()
+        stopInput()
         Log.info("stopped")
         exit(0)
     }
@@ -325,5 +381,6 @@ case "format": formatCommand(arguments)
 case "reset": resetCommand()
 case "sample": sampleCommand(arguments)
 case "kbm": kbmCommand(arguments)
+case "ble": bleCommand(arguments)
 default: print(usage)
 }

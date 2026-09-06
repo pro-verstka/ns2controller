@@ -53,6 +53,15 @@ final class AppModel {
     var autoWakeEnabled: Bool {
         didSet { UserDefaults.standard.set(autoWakeEnabled, forKey: "autoWake"); applyAutoWake() }
     }
+    var bluetoothEnabled: Bool {
+        didSet { UserDefaults.standard.set(bluetoothEnabled, forKey: "bluetooth"); applyBluetooth() }
+    }
+    var bleStatus: BLEInputSource.Status = .off
+    var bleConnected: Bool {
+        if case .connected = bleStatus { return true }
+        return false
+    }
+    var inputAvailable: Bool { hidAttached || bleConnected }
     var playerLED: Int {
         didSet { UserDefaults.standard.set(playerLED, forKey: "playerLED"); autoWake?.playerLED = playerLED }
     }
@@ -84,14 +93,28 @@ final class AppModel {
 
     private let hub = InputHub()
     private var input: HIDInputSource?
+    private var ble: BLEInputSource?
     private var autoWake: AutoWakeService?
     private var injector: EventInjector?
     private var lastCount = 0
     private var lastCountTime = Date()
     private var logHandle: FileHandle?
 
+    var bleStatusText: String {
+        switch bleStatus {
+        case .off: return "выключен"
+        case .unauthorized: return "нет разрешения: Системные настройки → Конфиденциальность → Bluetooth"
+        case .poweredOff: return "Bluetooth выключен"
+        case .scanning: return "поиск… зажми кнопку синхронизации на контроллере"
+        case let .connecting(name): return "подключение к \(name)"
+        case let .probing(name): return "поиск характеристики у \(name)"
+        case let .connected(name): return "подключён: \(name)"
+        }
+    }
+
     var statusLine: String {
-        if !usbPresent { return "Контроллер не подключён" }
+        if bleConnected { return bridgeRunning ? (bridgePaused ? "Мост на паузе (Bluetooth)" : "Мост работает: \(selectedProfile) (Bluetooth)") : "Bluetooth: \(reportsPerSecond) отч/с" }
+        if !usbPresent { return bluetoothEnabled ? "Bluetooth: \(bleStatusText)" : "Контроллер не подключён" }
         if !hidAttached { return "Контроллер подключён, HID не активен" }
         return bridgeRunning ? (bridgePaused ? "Мост на паузе" : "Мост работает: \(selectedProfile)") : "Контроллер активен, \(reportsPerSecond) отч/с"
     }
@@ -99,6 +122,7 @@ final class AppModel {
     init() {
         let defaults = UserDefaults.standard
         autoWakeEnabled = defaults.object(forKey: "autoWake") as? Bool ?? true
+        bluetoothEnabled = defaults.bool(forKey: "bluetooth")
         playerLED = max(1, min(8, defaults.integer(forKey: "playerLED") == 0 ? 1 : defaults.integer(forKey: "playerLED")))
         selectedProfile = defaults.string(forKey: "profile") ?? "default"
         Log.printToStdout = false
@@ -117,6 +141,8 @@ final class AppModel {
         refreshStatuses()
         startInput()
         applyAutoWake()
+        if let cached = CalibrationStore.load() { calibration = cached }
+        applyBluetooth()
         Task { @MainActor [weak self] in
             while let self, !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(33))
@@ -134,6 +160,7 @@ final class AppModel {
     func shutdown() {
         stopBridge()
         autoWake?.stop()
+        ble?.stop()
         input?.stop()
         Log.info("NS2 Controller app stopped")
     }
@@ -221,6 +248,27 @@ final class AppModel {
             let calibration = StickCalibration.read(using: Controller(transport: transport))
             transport.close()
             await MainActor.run { self?.calibration = calibration }
+        }
+    }
+
+    private func applyBluetooth() {
+        if bluetoothEnabled {
+            guard ble == nil else { return }
+            let hub = hub
+            let source = BLEInputSource(onStatus: { status in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.bleStatus = status
+                    if case .connected = status {} else { self.hub.bridge?.releaseAll() }
+                }
+            }, onState: { hub.push($0) })
+            source.onRawReport = { hub.pushRaw($0) }
+            source.start()
+            ble = source
+        } else {
+            ble?.stop()
+            ble = nil
+            bleStatus = .off
         }
     }
 

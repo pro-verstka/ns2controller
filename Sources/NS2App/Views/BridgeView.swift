@@ -27,7 +27,7 @@ struct BridgeView: View {
                     model.bridgeRunning ? model.stopBridge() : model.startBridge()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!model.hidAttached && !model.bridgeRunning)
+                .disabled(!model.inputAvailable && !model.bridgeRunning)
             }
             HStack(spacing: 8) {
                 Image(systemName: model.accessibilityTrusted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
