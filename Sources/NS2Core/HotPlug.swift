@@ -121,6 +121,17 @@ public final class USBInterfaceWatcher: @unchecked Sendable {
         }
     }
 
+    public func stop() {
+        if matchedIterator != 0 { IOObjectRelease(matchedIterator); matchedIterator = 0 }
+        if terminatedIterator != 0 { IOObjectRelease(terminatedIterator); terminatedIterator = 0 }
+        if powerNotifier != 0 {
+            IODeregisterForSystemPower(&powerNotifier)
+            powerNotifier = 0
+        }
+        if rootPowerDomain != 0 { IOServiceClose(rootPowerDomain); rootPowerDomain = 0 }
+        if let powerPort { IONotificationPortDestroy(powerPort); self.powerPort = nil }
+    }
+
     private func drain(_ iterator: io_iterator_t, handler: Handler) {
         while case let service = IOIteratorNext(iterator), service != 0 {
             if let info = IORegistry.deviceInfo(service) {

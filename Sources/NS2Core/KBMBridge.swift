@@ -96,7 +96,17 @@ public final class KBMBridge: @unchecked Sendable {
         if comboHeldSince == nil { comboHeldSince = time }
         guard !comboLatched, let since = comboHeldSince, time - since >= profile.pauseHoldSeconds else { return }
         comboLatched = true
-        paused.toggle()
+        applyPause(!paused)
+    }
+
+    public func setPaused(_ value: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        guard value != paused else { return }
+        applyPause(value)
+    }
+
+    private func applyPause(_ value: Bool) {
+        paused = value
         injector.releaseAll()
         leftDirections = Self.directions(for: profile.left)
         rightDirections = Self.directions(for: profile.right)

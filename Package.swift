@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS("15.0")],
     products: [
         .executable(name: "ns2ctl", targets: ["ns2ctl"]),
+        .executable(name: "NS2App", targets: ["NS2App"]),
         .library(name: "NS2Core", targets: ["NS2Core"]),
     ],
     targets: [
@@ -22,6 +23,15 @@ let package = Package(
         .executableTarget(
             name: "ns2ctl",
             dependencies: ["NS2Core"]
+        ),
+        .executableTarget(
+            name: "NS2App",
+            dependencies: ["NS2Core"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("SwiftUI"),
+                .linkedFramework("ServiceManagement"),
+            ]
         ),
         .testTarget(
             name: "NS2CoreTests",

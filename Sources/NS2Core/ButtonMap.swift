@@ -59,6 +59,12 @@ public enum ProController2Button: Int, CaseIterable, Sendable {
     }
 }
 
+public extension ProController2Button {
+    static var byProfileKey: [String: ProController2Button] {
+        Dictionary(uniqueKeysWithValues: allCases.map { ($0.profileKey, $0) })
+    }
+}
+
 public enum SteamMapping {
     public static let controllerName = "Nintendo Switch 2 Pro Controller"
 

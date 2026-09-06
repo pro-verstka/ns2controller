@@ -260,12 +260,15 @@ func kbmCommand(_ arguments: Arguments) {
     dispatchMain()
 }
 
+nonisolated(unsafe) var autoWake: AutoWakeService?
+
 func daemonCommand(_ arguments: Arguments) {
-    let daemon = Daemon(variant: variant(from: arguments),
-                        format: reportFormat(from: arguments),
-                        playerLED: arguments.values["--led"].flatMap(Int.init),
-                        holdInterface: arguments.flags.contains("--hold"))
-    do { try daemon.start() } catch { fail("\(error)") }
+    let service = AutoWakeService(variant: variant(from: arguments),
+                                  format: reportFormat(from: arguments),
+                                  playerLED: arguments.values["--led"].flatMap(Int.init),
+                                  holdInterface: arguments.flags.contains("--hold"))
+    do { try service.start() } catch { fail("\(error)") }
+    autoWake = service
     dispatchMain()
 }
 

@@ -48,6 +48,41 @@ public enum KeyTable {
         "5": kVK_ANSI_5, "6": kVK_ANSI_6, "7": kVK_ANSI_7, "8": kVK_ANSI_8, "9": kVK_ANSI_9,
     ]
 
+    static let canonicalOrder: [String] = [
+        "space", "return", "escape", "tab", "backspace", "delete", "caps_lock",
+        "left_shift", "right_shift", "left_ctrl", "right_ctrl", "left_alt", "right_alt", "left_cmd", "right_cmd",
+        "up", "down", "left", "right", "home", "end", "page_up", "page_down",
+        "minus", "equal", "comma", "period", "slash", "semicolon", "quote", "bracket_left", "bracket_right", "backslash", "grave",
+        "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12", "f13", "f14", "f15", "f16", "f17", "f18", "f19", "f20",
+    ]
+
+    static let codeNames: [Int: String] = {
+        var table: [Int: String] = [:]
+        for (character, code) in letters { table[code] = String(character) }
+        for name in canonicalOrder { if let code = named[name], table[code] == nil { table[code] = name } }
+        return table
+    }()
+
+    public static let allNames: [String] = letters.keys.map(String.init).sorted() + canonicalOrder
+        + ["mouse_left", "mouse_right", "mouse_middle", "mouse_4", "mouse_5", "scroll_up", "scroll_down"]
+
+    public static func name(for binding: KeyBinding) -> String? {
+        switch binding {
+        case let .key(code): return codeNames[Int(code)]
+        case let .mouse(_, number):
+            switch number {
+            case 0: return "mouse_left"
+            case 1: return "mouse_right"
+            case 2: return "mouse_middle"
+            case 3: return "mouse_4"
+            default: return "mouse_5"
+            }
+        case let .scroll(lines): return lines > 0 ? "scroll_up" : "scroll_down"
+        }
+    }
+
+    public static func name(forKeyCode code: Int) -> String? { codeNames[code] }
+
     public static func binding(for rawName: String) -> KeyBinding? {
         let name = rawName.lowercased().trimmingCharacters(in: .whitespaces)
         switch name {
@@ -145,6 +180,19 @@ public struct KBMProfile: Codable, Equatable, Sendable {
         if !overwrite, FileManager.default.fileExists(atPath: url.path) { return url }
         try template.write(to: url, atomically: true, encoding: .utf8)
         return url
+    }
+
+    public static func save(_ profile: KBMProfile, name: String) throws -> URL {
+        let url = url(for: name)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(profile).write(to: url)
+        return url
+    }
+
+    public static func delete(name: String) throws {
+        try FileManager.default.removeItem(at: url(for: name))
     }
 
     public static func load(name: String) throws -> KBMProfile {

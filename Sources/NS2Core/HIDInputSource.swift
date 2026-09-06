@@ -22,6 +22,8 @@ public final class HIDInputSource: @unchecked Sendable {
     private var thread: Thread?
     private var runLoop: CFRunLoop?
     private let started = DispatchSemaphore(value: 0)
+    public var onRawReport: (@Sendable ([UInt8]) -> Void)?
+    public private(set) var isAttached = false
 
     public init(exclusive: Bool, onAttach: @escaping DeviceHandler, onDetach: @escaping DeviceHandler, onState: @escaping StateHandler) {
         self.exclusive = exclusive
@@ -69,10 +71,13 @@ public final class HIDInputSource: @unchecked Sendable {
     private func attach(_ device: IOHIDDevice) {
         let entry = DeviceBuffer(device: device)
         buffers.append(entry)
+        isAttached = true
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(device, entry.buffer, 256, { refcon, _, _, _, _, report, length in
             let source = Unmanaged<HIDInputSource>.fromOpaque(refcon!).takeUnretainedValue()
-            guard let state = InputReport.parseHID(Array(UnsafeBufferPointer(start: report, count: length))) else { return }
+            let bytes = Array(UnsafeBufferPointer(start: report, count: length))
+            source.onRawReport?(bytes)
+            guard let state = InputReport.parseHID(bytes) else { return }
             source.onState(state)
         }, refcon)
         onAttach(HIDMonitor.describe(device).components(separatedBy: "\n").first ?? "controller")
@@ -80,6 +85,7 @@ public final class HIDInputSource: @unchecked Sendable {
 
     private func detach(_ device: IOHIDDevice) {
         buffers.removeAll { $0.device == device }
+        isAttached = !buffers.isEmpty
         onDetach("controller")
     }
 }
