@@ -100,6 +100,14 @@ private let leftFlashBlock: [UInt8] = {
         }
     }
 
+    @Test func recenterDefaultsToTrueAndCanBeDisabled() throws {
+        let json = KBMProfile.template.replacingOccurrences(of: "\"invert_y\": false", with: "\"invert_y\": false, \"recenter\": false")
+        let profile = try KBMProfile.parse(Data(json.utf8)).resolved()
+        if case let .mouse(_, _, _, recenter) = profile.right.mode { #expect(recenter == false) } else { Issue.record("mouse mode expected") }
+        let defaults = try KBMProfile.parse(Data(KBMProfile.template.utf8)).resolved()
+        if case let .mouse(_, _, _, recenter) = defaults.right.mode { #expect(recenter == true) } else { Issue.record("mouse mode expected") }
+    }
+
     @Test func unknownKeyNameFails() {
         let json = KBMProfile.template.replacingOccurrences(of: "\"space\"", with: "\"spaec\"")
         #expect(throws: NS2Error.self) { try KBMProfile.parse(Data(json.utf8)).resolved() }

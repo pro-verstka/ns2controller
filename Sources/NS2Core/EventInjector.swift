@@ -12,6 +12,17 @@ public final class EventInjector: @unchecked Sendable {
     private var boundsRefreshed = Date.distantPast
     public var dryRun = false
 
+    private typealias CursorVisibleFunction = @convention(c) () -> UInt32
+    private static let cursorVisibleFunction: CursorVisibleFunction? = {
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGCursorIsVisible") else { return nil }
+        return unsafeBitCast(symbol, to: CursorVisibleFunction.self)
+    }()
+
+    public static func isCursorHidden() -> Bool {
+        guard let function = cursorVisibleFunction else { return true }
+        return function() == 0
+    }
+
     public var held: (keys: Int, mouse: Int) {
         lock.lock(); defer { lock.unlock() }
         return (heldKeys.count, heldMouse.count)
@@ -86,7 +97,7 @@ public final class EventInjector: @unchecked Sendable {
         flags = []
     }
 
-    public func moveMouse(dx: Int, dy: Int) {
+    public func moveMouse(dx: Int, dy: Int, recenter: Bool = true) {
         guard dx != 0 || dy != 0 else { return }
         lock.lock(); defer { lock.unlock() }
         guard !dryRun else { return }
@@ -95,7 +106,7 @@ public final class EventInjector: @unchecked Sendable {
         let marginX = bounds.width * 0.12
         let marginY = bounds.height * 0.12
         let safe = bounds.insetBy(dx: marginX, dy: marginY)
-        if !safe.contains(current) {
+        if recenter, !safe.contains(current), Self.isCursorHidden() {
             current = CGPoint(x: bounds.midX, y: bounds.midY)
             CGWarpMouseCursorPosition(current)
             Log.debug("cursor recentered")

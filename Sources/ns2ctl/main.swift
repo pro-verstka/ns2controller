@@ -286,9 +286,9 @@ func kbmCommand(_ arguments: Arguments) {
         CFRunLoopRunInMode(.defaultMode, 0.4, false)
         seen.stop()
         let ok = abs(moved.x - before.x - 30) < 2
-        Log.info(String(format: "cursor %.0f,%.0f -> %.0f,%.0f: %@; shift flagsChanged events: %d (%@)",
+        Log.info(String(format: "cursor %.0f,%.0f -> %.0f,%.0f: %@; shift flagsChanged events: %d (%@); cursor hidden now: %@",
                         before.x, before.y, moved.x, moved.y, ok ? "OK" : "cursor did not move",
-                        seen.count, seen.sawShift ? "shift flag OK" : "no shift flag"))
+                        seen.count, seen.sawShift ? "shift flag OK" : "no shift flag", EventInjector.isCursorHidden() ? "yes" : "no"))
         exit(ok && seen.sawShift ? 0 : 1)
     }
     if let name = arguments.values["--init-profile"] {

@@ -137,10 +137,10 @@ public final class KBMBridge: @unchecked Sendable {
                 if transition { injector.press(binding) } else { injector.release(binding) }
             }
             return updated
-        case let .mouse(sensitivity, curve, invertY):
+        case let .mouse(sensitivity, curve, invertY, recenter):
             func shape(_ v: Double) -> Double { (v < 0 ? -1.0 : 1.0) * pow(abs(v), curve) * sensitivity * dt }
             let (dx, dy) = accumulator.add(dx: shape(value.x), dy: shape(invertY ? value.y : -value.y))
-            injector.moveMouse(dx: dx, dy: dy)
+            injector.moveMouse(dx: dx, dy: dy, recenter: recenter)
             return directions
         }
     }

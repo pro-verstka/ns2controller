@@ -128,9 +128,10 @@ public struct StickConfig: Codable, Equatable, Sendable {
     public var sensitivity: Double?
     public var curve: Double?
     public var invertY: Bool?
+    public var recenter: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case mode, threshold, up, down, left, right, sensitivity, curve
+        case mode, threshold, up, down, left, right, sensitivity, curve, recenter
         case invertY = "invert_y"
     }
 }
@@ -236,7 +237,7 @@ public struct ResolvedStick: Sendable {
     public enum Mode: Sendable {
         case none
         case keys(threshold: Double, up: KeyBinding?, down: KeyBinding?, left: KeyBinding?, right: KeyBinding?)
-        case mouse(sensitivity: Double, curve: Double, invertY: Bool)
+        case mouse(sensitivity: Double, curve: Double, invertY: Bool, recenter: Bool)
     }
     public var mode: Mode
 }
@@ -293,7 +294,8 @@ public struct ResolvedProfile: Sendable {
         case .mouse:
             return ResolvedStick(mode: .mouse(sensitivity: max(1, config.sensitivity ?? 1200),
                                               curve: max(0.5, min(3, config.curve ?? 1.5)),
-                                              invertY: config.invertY ?? false))
+                                              invertY: config.invertY ?? false,
+                                              recenter: config.recenter ?? true))
         }
     }
 }

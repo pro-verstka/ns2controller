@@ -170,6 +170,7 @@ struct StickEditor: View {
                     Text(String(format: "%.1f", config.curve ?? 1.5)).monospacedDigit().frame(width: 40, alignment: .trailing)
                 }
                 Toggle("Инвертировать вертикаль", isOn: Binding(get: { config.invertY ?? false }, set: { config.invertY = $0 }))
+                Toggle("Держать курсор в центре окна (камера)", isOn: Binding(get: { config.recenter ?? true }, set: { config.recenter = $0 }))
             case .none:
                 Text("Стик не используется").foregroundStyle(.secondary)
             }
