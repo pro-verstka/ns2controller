@@ -46,6 +46,17 @@ import Testing
     }
 }
 
+@Suite struct ModifierFlagTests {
+    @Test func leftAndRightModifiersCarryDeviceBits() {
+        let left = KeyBinding.modifierFlags(forKeyCode: 56)!
+        let right = KeyBinding.modifierFlags(forKeyCode: 60)!
+        #expect(left.contains(.maskShift) && right.contains(.maskShift))
+        #expect(left.rawValue & 0x2 != 0 && right.rawValue & 0x4 != 0)
+        #expect(KeyBinding.modifierFlags(forKeyCode: 59)!.rawValue & 0x1 != 0)
+        #expect(KeyBinding.modifierFlags(forKeyCode: 14) == nil)
+    }
+}
+
 @Suite struct KeyTableTests {
     @Test func roundTripsNames() {
         for name in ["w", "5", "space", "left_shift", "f12", "mouse_right", "scroll_down", "return"] {

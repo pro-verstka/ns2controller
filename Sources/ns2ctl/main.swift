@@ -176,6 +176,36 @@ func sampleCommand(_ arguments: Arguments) {
     } catch { fail("\(error)") }
 }
 
+final class ModifierProbe {
+    var count = 0
+    var sawShift = false
+    private var tap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+
+    func start() {
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
+                                eventsOfInterest: CGEventMask(1 << CGEventType.flagsChanged.rawValue),
+                                callback: { _, type, event, refcon in
+                                    let probe = Unmanaged<ModifierProbe>.fromOpaque(refcon!).takeUnretainedValue()
+                                    if type == .flagsChanged {
+                                        probe.count += 1
+                                        if event.flags.contains(.maskShift), event.flags.rawValue & 0x2 != 0 { probe.sawShift = true }
+                                    }
+                                    return Unmanaged.passUnretained(event)
+                                }, userInfo: refcon)
+        guard let tap else { Log.warn("event tap unavailable (Accessibility?)"); return }
+        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .defaultMode)
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    func stop() {
+        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+        if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .defaultMode) }
+    }
+}
+
 nonisolated(unsafe) var signalSources: [DispatchSourceSignal] = []
 
 func installSignalHandlers(_ handler: @escaping @Sendable () -> Void) {
@@ -206,11 +236,17 @@ func kbmCommand(_ arguments: Arguments) {
         Thread.sleep(forTimeInterval: 0.2)
         let moved = CGEvent(source: nil)?.location ?? .zero
         injector.moveMouse(dx: -30, dy: 0)
+        let seen = ModifierProbe()
+        seen.start()
         injector.press(.key(CGKeyCode(56)))
         injector.release(.key(CGKeyCode(56)))
+        CFRunLoopRunInMode(.defaultMode, 0.4, false)
+        seen.stop()
         let ok = abs(moved.x - before.x - 30) < 2
-        Log.info(String(format: "cursor %.0f,%.0f -> %.0f,%.0f, shift tapped: %@", before.x, before.y, moved.x, moved.y, ok ? "OK" : "cursor did not move"))
-        exit(ok ? 0 : 1)
+        Log.info(String(format: "cursor %.0f,%.0f -> %.0f,%.0f: %@; shift flagsChanged events: %d (%@)",
+                        before.x, before.y, moved.x, moved.y, ok ? "OK" : "cursor did not move",
+                        seen.count, seen.sawShift ? "shift flag OK" : "no shift flag"))
+        exit(ok && seen.sawShift ? 0 : 1)
     }
     if let name = arguments.values["--init-profile"] {
         do {

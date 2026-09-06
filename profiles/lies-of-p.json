@@ -1,0 +1,30 @@
+{
+  "deadzone": 0.15,
+  "left_stick":  { "mode": "keys",  "threshold": 0.5, "up": "w", "down": "s", "left": "a", "right": "d" },
+  "right_stick": { "mode": "mouse", "sensitivity": 1500, "curve": 1.6, "invert_y": false },
+  "buttons": {
+    "b": "e",
+    "a": "space",
+    "y": "r",
+    "x": "f",
+    "r": "mouse_left",
+    "zr": "mouse_right",
+    "l": "left_shift",
+    "zl": "left_ctrl",
+    "rs": "mouse_middle",
+    "ls": null,
+    "dpad_up": "t",
+    "dpad_down": "g",
+    "dpad_left": "x",
+    "dpad_right": "tab",
+    "plus": "escape",
+    "minus": "c",
+    "home": null,
+    "capture": null,
+    "c": null,
+    "gl": "space",
+    "gr": "left_shift"
+  },
+  "pause_combo": ["home"],
+  "pause_hold_seconds": 1.0
+}

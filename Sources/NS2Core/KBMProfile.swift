@@ -9,13 +9,24 @@ public enum KeyBinding: Equatable, Sendable {
 
     public var modifierFlag: CGEventFlags? {
         guard case let .key(code) = self else { return nil }
+        return KeyBinding.modifierFlags(forKeyCode: code)
+    }
+
+    public static func modifierFlags(forKeyCode code: CGKeyCode) -> CGEventFlags? {
+        let device: UInt64
+        let mask: CGEventFlags
         switch Int(code) {
-        case kVK_Shift, kVK_RightShift: return .maskShift
-        case kVK_Control, kVK_RightControl: return .maskControl
-        case kVK_Option, kVK_RightOption: return .maskAlternate
-        case kVK_Command, kVK_RightCommand: return .maskCommand
+        case kVK_Shift: (mask, device) = (.maskShift, 0x0002)
+        case kVK_RightShift: (mask, device) = (.maskShift, 0x0004)
+        case kVK_Control: (mask, device) = (.maskControl, 0x0001)
+        case kVK_RightControl: (mask, device) = (.maskControl, 0x2000)
+        case kVK_Option: (mask, device) = (.maskAlternate, 0x0020)
+        case kVK_RightOption: (mask, device) = (.maskAlternate, 0x0040)
+        case kVK_Command: (mask, device) = (.maskCommand, 0x0008)
+        case kVK_RightCommand: (mask, device) = (.maskCommand, 0x0010)
         default: return nil
         }
+        return CGEventFlags(rawValue: mask.rawValue | device)
     }
 }
 

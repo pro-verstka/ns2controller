@@ -212,6 +212,7 @@ final class AppModel {
         crossOverInstalled = selectedBottle.isEmpty ? false : CrossOverIntegration.isInstalled(bottle: selectedBottle)
         launchAtLogin = SMAppService.mainApp.status == .enabled
         launchAgentActive = Self.launchAgentLoaded()
+        refreshProfileList()
     }
 
     private func readCalibration() {
@@ -296,6 +297,11 @@ final class AppModel {
     }
 
     // MARK: - Bridge
+
+    func refreshProfileList() {
+        let names = KBMProfile.list()
+        if names != profiles { profiles = names }
+    }
 
     func refreshProfiles() {
         profiles = KBMProfile.list()

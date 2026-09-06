@@ -20,6 +20,11 @@ fi
 echo "==> Installing $BIN"
 install -m 755 ".build/release/ns2ctl" "$BIN"
 
+if [ -d "/Applications/NS2 Controller.app" ]; then
+    echo "==> NS2 Controller.app is installed: it handles auto-wake, skipping LaunchAgent (binary updated)"
+    exit 0
+fi
+
 echo "==> Installing $PLIST"
 sed -e "s|__NS2CTL__|$BIN|g" -e "s|__LOG__|$LOG|g" "LaunchAgents/$LABEL.plist" > "$PLIST"
 
